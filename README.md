@@ -1,36 +1,132 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Picks - AI-Powered Movie & TV Recommendations
 
-## Getting Started
+A minimalist, AI-powered movie and TV show recommendation app that helps you discover your next favorite watch based on your mood, preferences, and viewing history.
 
-First, run the development server:
+## ✨ Features
+
+- **🎭 Mood-Based Quick Picks**: Get instant recommendations based on how you're feeling (10 different moods)
+- **🤖 AI-Powered Search**: Advanced RAG (Retrieval-Augmented Generation) workflow using Google Gemini
+- **📝 Personal Watchlist**: Save recommendations with local storage and export functionality
+- **🔍 Smart Filters**: Quick genre and length filters for better recommendations
+- **🌐 Web Search Integration**: Fallback to real-time web search for latest content
+- **📱 Responsive Design**: Beautiful, minimal UI that works on all devices
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ or Bun
+- Google Generative AI API key
+- Supabase account (for vector database)
+- Tavily API key (for web search)
+
+### Installation
+
+1. Clone the repository:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <your-repo-url>
+cd picks
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+bun install
+# or
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Set up environment variables:
 
-## Learn More
+```bash
+cp .env.example .env.local
+```
 
-To learn more about Next.js, take a look at the following resources:
+Add your API keys to `.env.local`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```env
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+TAVILY_API_KEY=your_tavily_api_key
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. Run the development server:
 
-## Deploy on Vercel
+```bash
+bun dev
+# or
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🏗️ Tech Stack
+
+- **Framework**: Next.js 14 (App Router)
+- **Styling**: Tailwind CSS + Radix UI
+- **AI/ML**: Google Gemini 2.0 Flash, LangChain, LangGraph
+- **Database**: Supabase (Vector Store)
+- **Search**: Tavily API
+- **State Management**: React Hooks + Local Storage
+- **Type Safety**: TypeScript
+
+## 📖 How It Works
+
+### AI-Powered Recommendations
+
+The app uses an advanced agentic RAG workflow:
+
+1. **Query Processing**: User input is processed and optimized
+2. **Vector Search**: Semantic search through movie/TV database
+3. **Relevance Grading**: AI evaluates if results match the query
+4. **Web Search Fallback**: If local results aren't relevant, searches the web
+5. **Response Generation**: AI generates personalized recommendations
+
+### Mood-Based Quick Picks
+
+Choose from 10 distinct moods:
+
+- 😊 Happy & Uplifting
+- 🤩 Thrilled & Energetic
+- 😌 Calm & Relaxed
+- 🥰 Romantic & Loving
+- 🤔 Curious & Intrigued
+- 🥺 Nostalgic & Sentimental
+- 🧗 Adventurous & Bold
+- 🧠 Thoughtful & Cerebral
+- 🏠 Cozy & Comfortable
+- 🎭 Emotional & Dramatic
+
+### Watchlist Features
+
+- **Local Storage**: All data stored locally for privacy
+- **Export Options**: Download your watchlist as JSON
+- **Status Tracking**: Mark items as "Want to Watch", "Watching", or "Watched"
+- **Search & Filter**: Find items in your watchlist quickly
+- **Cross-tab Sync**: Changes sync across browser tabs
+
+## 🎯 Free Tier Optimized
+
+The app is optimized for Google Gemini's free tier:
+
+- **Token Management**: Automatic token usage tracking
+- **Rate Limiting**: Built-in protection against API limits
+- **Efficient Prompts**: Minimized token consumption
+- **Smart Caching**: Reduced redundant API calls
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 🙏 Acknowledgments
+
+- Built with [Next.js](https://nextjs.org/)
+- AI powered by [Google Gemini](https://ai.google.dev/)
+- UI components from [Radix UI](https://www.radix-ui.com/)
+- Styled with [Tailwind CSS](https://tailwindcss.com/)

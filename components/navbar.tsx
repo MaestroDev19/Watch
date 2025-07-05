@@ -1,9 +1,11 @@
 "use client";
 
-import { Tv, Menu } from "lucide-react";
+import { Tv, Menu, Heart } from "lucide-react";
 import Link from "next/link";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "./ui/sheet";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { useWatchlistStats } from "@/hooks/use-watchlist";
 
 interface NavLink {
   label: string;
@@ -17,12 +19,16 @@ const navLinks: NavLink[] = [
 ];
 
 export function Nav() {
+  const watchlistStats = useWatchlistStats();
+
   return (
     <header className="sticky top-0 z-50 bg-background border-b">
       <nav className="flex justify-between items-center p-4">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-medium">Picks</h1>
+          <Link href="/">
+            <h1 className="text-xl font-medium">Watch</h1>
+          </Link>
         </div>
 
         {/* Desktop Navigation Links */}
@@ -31,9 +37,17 @@ export function Nav() {
             <Link
               href={link.href}
               key={link.label}
-              className="text-sm text-foreground hover:underline underline-offset-4"
+              className="text-sm text-foreground hover:underline underline-offset-4 flex items-center gap-2"
             >
               {link.label}
+              {link.href === "/watchlist" && watchlistStats.totalItems > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs px-1.5 py-0.5 min-w-0"
+                >
+                  {watchlistStats.totalItems}
+                </Badge>
+              )}
             </Link>
           ))}
         </div>
@@ -56,9 +70,15 @@ export function Nav() {
                     <Link
                       key={link.label}
                       href={link.href}
-                      className="flex items-center space-x-3 text-lg font-medium text-foreground p-2"
+                      className="flex items-center justify-between text-lg font-medium text-foreground p-2"
                     >
                       <span>{link.label}</span>
+                      {link.href === "/watchlist" &&
+                        watchlistStats.totalItems > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {watchlistStats.totalItems}
+                          </Badge>
+                        )}
                     </Link>
                   ))}
                 </div>

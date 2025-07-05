@@ -14,6 +14,7 @@ import { z } from "zod";
 import { StateGraph } from "@langchain/langgraph";
 import { generatePrompt, gradePrompt, rewritePrompt } from "./prompt";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
+import { tokenTracker, estimateTokens } from "./utils";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,20 +31,28 @@ const vectorStore = new SupabaseVectorStore(embeddings, {
   tableName: "dcp",
   queryName: "match_documents",
 });
-vectorStore.asRetriever();
 
-const retriever = vectorStore.asRetriever();
+const retriever = vectorStore.asRetriever({
+  k: 3, // Reduce from default to limit token usage
+});
+
+// Use Gemini 2.0 Flash for best free tier limits: 15 RPM, 1M TPM, 200 RPD
 const llm = new ChatGoogleGenerativeAI({
   model: "gemini-2.0-flash",
   temperature: 0.1,
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY!,
   streaming: true,
+  maxOutputTokens: 512, // Limit output to reduce token consumption
 });
 
 const GraphState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
     default: () => [],
+  }),
+  useWebSearch: Annotation<boolean>({
+    reducer: (x, y) => y ?? x,
+    default: () => false,
   }),
 });
 
@@ -53,7 +62,7 @@ const tool = createRetrieverTool(retriever, {
 });
 const tools = [tool];
 
-const toolNode = new ToolNode<typeof GraphState.State>(tools);
+const toolNode = new ToolNode(tools);
 
 function shouldRecommend(state: typeof GraphState.State) {
   const { messages } = state;
@@ -69,18 +78,32 @@ function shouldRecommend(state: typeof GraphState.State) {
   return END;
 }
 
+// Simplified grading that skips web search for better token efficiency
 async function gradeRecomendation(
   state: typeof GraphState.State
 ): Promise<Partial<typeof GraphState.State>> {
   console.log("------Grading the recommendation------");
   const { messages } = state;
+
+  // Simple heuristic: if we got retrieval results, consider them relevant
+  // This saves one API call and reduces token usage
+  const lastMessage = messages[messages.length - 1];
+  if (
+    lastMessage.getType() === "tool" &&
+    lastMessage.content &&
+    (lastMessage.content as string).trim().length > 50
+  ) {
+    console.log("---DECISION: DOCS RELEVANT (heuristic)---");
+    return { useWebSearch: false };
+  }
+
+  // Only do expensive grading for edge cases
   const prompt = ChatPromptTemplate.fromTemplate(gradePrompt);
   const model = llm.bindTools([gradeTool], {
     tool_choice: gradeTool.name,
   });
   const chain = prompt.pipe(model);
 
-  const lastMessage = messages[messages.length - 1];
   const score = await chain.invoke({
     question: messages[0].content as string,
     context: lastMessage.content as string,
@@ -94,7 +117,13 @@ async function gradeRecomendation(
 function checkRelevance(state: typeof GraphState.State): string {
   console.log("---CHECK RELEVANCE---");
 
-  const { messages } = state;
+  const { messages, useWebSearch } = state;
+
+  // If we already decided to skip web search, go to generate
+  if (useWebSearch === false) {
+    return "yes";
+  }
+
   const lastMessage = messages[messages.length - 1];
   if (!("tool_calls" in lastMessage)) {
     throw new Error(
@@ -114,6 +143,7 @@ function checkRelevance(state: typeof GraphState.State): string {
   return "no";
 }
 
+// Simplified agent that doesn't rewrite queries (saves tokens)
 async function agent(
   state: typeof GraphState.State
 ): Promise<Partial<typeof GraphState.State>> {
@@ -139,54 +169,7 @@ async function agent(
   };
 }
 
-async function rewrite(
-  state: typeof GraphState.State
-): Promise<Partial<typeof GraphState.State>> {
-  console.log("---TRANSFORM QUERY---");
-
-  const { messages } = state;
-  const question = messages[0].content as string;
-  const prompt = ChatPromptTemplate.fromTemplate(rewritePrompt);
-
-  const model = llm;
-  const response = await prompt.pipe(model).invoke({ question });
-  return {
-    messages: [response],
-  };
-}
-
-async function generate(
-  state: typeof GraphState.State
-): Promise<Partial<typeof GraphState.State>> {
-  console.log("---GENERATE---");
-
-  const { messages } = state;
-  const question = messages[0].content as string;
-
-  const lastToolMessage = messages
-    .slice()
-    .reverse()
-    .find((msg) => msg.getType() === "tool");
-  if (!lastToolMessage) {
-    throw new Error("No tool message found in the conversation history");
-  }
-
-  const docs = lastToolMessage.content as string;
-
-  const prompt = ChatPromptTemplate.fromTemplate(generatePrompt);
-  const ragChain = prompt.pipe(llm);
-
-  const response = await ragChain.invoke({
-    context: docs,
-    question,
-  });
-
-  return {
-    messages: [response],
-  };
-}
-
-// Create a wrapper for webSearch to add debugging
+// Simplified web search with token limits
 async function webSearchWrapper(
   state: typeof GraphState.State
 ): Promise<Partial<typeof GraphState.State>> {
@@ -194,18 +177,22 @@ async function webSearchWrapper(
   const { messages } = state;
 
   try {
-    // Get the user's original question
     const question = messages[0].content as string;
     console.log("Web search query:", question);
 
-    // Call the webTool (Tavily search)
     const searchResults = await webTool.invoke({ query: question });
-    console.log("Web search results:", searchResults);
+
+    // Truncate web search results to limit tokens
+    const truncatedResults =
+      (searchResults as string).slice(0, 1000) +
+      (searchResults.length > 1000 ? "..." : "");
+
+    console.log("Web search results (truncated):", truncatedResults);
 
     return {
       messages: [
         {
-          content: searchResults,
+          content: truncatedResults,
           type: "tool",
           name: "webSearch",
           tool_call_id: "web_search_" + Date.now(),
@@ -228,16 +215,52 @@ async function webSearchWrapper(
   }
 }
 
+async function generate(
+  state: typeof GraphState.State
+): Promise<Partial<typeof GraphState.State>> {
+  console.log("---GENERATE---");
+
+  const { messages } = state;
+  const question = messages[0].content as string;
+
+  const lastToolMessage = messages
+    .slice()
+    .reverse()
+    .find((msg) => msg.getType() === "tool");
+  if (!lastToolMessage) {
+    throw new Error("No tool message found in the conversation history");
+  }
+
+  let docs = lastToolMessage.content as string;
+
+  // Truncate context to limit token usage
+  if (docs.length > 2000) {
+    docs = docs.slice(0, 2000) + "...";
+  }
+
+  const prompt = ChatPromptTemplate.fromTemplate(generatePrompt);
+  const ragChain = prompt.pipe(llm);
+
+  const response = await ragChain.invoke({
+    context: docs,
+    question,
+  });
+
+  return {
+    messages: [response],
+  };
+}
+
+// Simplified workflow with fewer steps
 const workflow = new StateGraph(GraphState)
   .addNode("agent", agent)
   .addNode("retrieve", toolNode)
   .addNode("gradeDocuments", gradeRecomendation)
   .addNode("webSearch", webSearchWrapper)
-  .addNode("rewrite", rewrite)
   .addNode("generate", generate);
 
-workflow.addEdge(START, "rewrite");
-workflow.addEdge("rewrite", "agent");
+// Simplified flow: skip rewrite step to save tokens
+workflow.addEdge(START, "agent");
 workflow.addConditionalEdges("agent", shouldRecommend);
 workflow.addEdge("retrieve", "gradeDocuments");
 workflow.addConditionalEdges("gradeDocuments", checkRelevance, {
@@ -250,7 +273,8 @@ workflow.addEdge("generate", END);
 const runner = workflow.compile();
 
 /**
- * Streams recommendations for a given user query using the agentic RAG workflow.
+ * Streams recommendations for a given user query using the token-optimized agentic RAG workflow.
+ * Optimized for Gemini API free tier limits.
  * Usage example:
  *
  *   for await (const output of streamRecommendations("your query here")) {
@@ -258,6 +282,22 @@ const runner = workflow.compile();
  *   }
  */
 export async function* streamRecommendations(query: string) {
+  // Check if we should throttle due to rate limits
+  if (tokenTracker.shouldThrottle()) {
+    const stats = tokenTracker.getUsageStats();
+    yield {
+      node: "rate_limit",
+      type: "error",
+      content: `Rate limit protection: Please wait a moment before making another request. Usage: ${stats.requestsLastMinute}/${stats.limits.requestsPerMinute} requests/min`,
+      tool_calls: undefined,
+    };
+    return;
+  }
+
+  // Track initial token usage
+  const queryTokens = estimateTokens(query);
+  tokenTracker.addUsage(queryTokens, "gemini-2.0-flash");
+
   const inputs = {
     messages: [new HumanMessage(query)],
   };
@@ -274,6 +314,13 @@ export async function* streamRecommendations(query: string) {
       }
       const messages = (value as any).messages;
       const lastMsg = messages[messages.length - 1];
+
+      // Track token usage for AI responses
+      if (lastMsg.content && typeof lastMsg.content === "string") {
+        const responseTokens = estimateTokens(lastMsg.content);
+        tokenTracker.addUsage(responseTokens, "gemini-2.0-flash");
+      }
+
       // Use safe access for tool_calls
       yield {
         node: key,

@@ -1,8 +1,9 @@
 "use client";
-import type { Movies, Trending, TvShows } from "@/data/types";
+import type { Movies, Trending, TvShows } from "@/types";
 import { useRouter } from "next/navigation";
-import { Star, Heart } from "lucide-react";
-import { convertToDecimal } from "@/lib/func";
+import { Star } from "lucide-react";
+import { convertToDecimal } from "@/lib/utils";
+import { AddToWatchlistIcon } from "@/components/watchlist/add-to-watchlist-button";
 
 interface MovieCardProps {
   item: Trending | Movies | TvShows;
@@ -65,6 +66,14 @@ export function MovieCard({
 
           {/* Gradient overlay - always visible */}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
+
+          {/* Add to Watchlist button - appears on hover */}
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <AddToWatchlistIcon
+              item={item}
+              className="bg-white/90 hover:bg-white shadow-md"
+            />
+          </div>
         </div>
 
         {/* Content below the image */}
